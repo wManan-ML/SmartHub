@@ -35,8 +35,15 @@ THEME = {
 DEFAULT_THEME = ("🔌", "#888888")
 
 
+def kind(dev):
+    """Class name of a device, e.g. "Fan". We compare names instead of using
+    isinstance(), because Streamlit can re-import the module and then the
+    devices kept in the shared hub no longer match the freshly imported classes."""
+    return type(dev).__name__
+
+
 def theme_of(dev):
-    return THEME.get(type(dev).__name__, DEFAULT_THEME)
+    return THEME.get(kind(dev), DEFAULT_THEME)
 
 
 # ----------------------------------------------------------------------
@@ -167,19 +174,19 @@ def build_css(devices):
 def card_header(dev):
     """Picture + name + room. The picture goes grey when the device is off."""
     emoji = theme_of(dev)[0]
-    if isinstance(dev, DoorLock) and not dev.is_locked():
+    if kind(dev) == "DoorLock" and not dev.is_locked():
         emoji = "🔓"
     style, cls = "font-size:40px; line-height:1;", ""
     if not dev.is_on:
         style += " filter: grayscale(1); opacity: 0.5;"
-    elif isinstance(dev, Fan):
+    elif kind(dev) == "Fan":
         cls = "spin"                 # fan icon rotates while it is on
     name, room = html.escape(dev.name), html.escape(dev.room)
     st.markdown(
         f"<div style='display:flex; align-items:center; gap:12px;'>"
         f"<div class='{cls}' style='{style}'>{emoji}</div>"
         f"<div><b>{name}</b><br>"
-        f"<span style='opacity:0.7'>{room} · {type(dev).__name__}</span></div></div>",
+        f"<span style='opacity:0.7'>{room} · {kind(dev)}</span></div></div>",
         unsafe_allow_html=True)
 
 
@@ -199,7 +206,7 @@ def device_controls(dev):
 
     # on/off buttons (a DoorLock uses lock/unlock but the call is the same:
     # turn_on()/turn_off() -> polymorphism)
-    on_label, off_label = ("Lock", "Unlock") if isinstance(dev, DoorLock) else ("ON", "OFF")
+    on_label, off_label = ("Lock", "Unlock") if kind(dev) == "DoorLock" else ("ON", "OFF")
     c1, c2 = st.columns(2)
     if c1.button(on_label, key=f"on_{uid}"):
         safe(dev.turn_on)
@@ -210,17 +217,17 @@ def device_controls(dev):
 
     # settings (speed, temperature...) are only shown while the device is ON
     if dev.is_on:
-        if isinstance(dev, Light):
+        if kind(dev) == "Light":
             setting_slider("Brightness (%)", 0, 100, dev.get_brightness(),
                            dev.set_brightness, f"bright_{uid}")
-        elif isinstance(dev, Fan):
+        elif kind(dev) == "Fan":
             setting_slider("Speed", dev.MIN_SPEED, dev.MAX_SPEED, dev.get_speed(),
                            dev.set_speed, f"speed_{uid}")
-        elif isinstance(dev, (AC, Heater, Geyser, Refrigerator)):
+        elif kind(dev) in ("AC", "Heater", "Geyser", "Refrigerator"):
             setting_slider("Temperature (°C)", dev.MIN_TEMP, dev.MAX_TEMP,
                            dev.get_temperature(), dev.set_temperature, f"temp_{uid}")
 
-    if isinstance(dev, Refrigerator):
+    if kind(dev) == "Refrigerator":
         d1, d2 = st.columns(2)
         if d1.button("Open door", key=f"open_{uid}"):
             safe(dev.open_door)
@@ -349,7 +356,7 @@ with tab_oop:
         st.write(f"`{type(d).__name__}` → {d.get_status()}")
 
     st.subheader("Encapsulation demo")
-    lights = [d for d in hub.devices if isinstance(d, Light)]
+    lights = [d for d in hub.devices if kind(d) == "Light"]
     if lights:
         if st.button("Try to read light.__brightness directly"):
             try:
