@@ -90,17 +90,8 @@ def safe(func, *args):
         st.session_state.error = str(e)
 
 
-def apply_value(setter, key):
-    """Used by sliders: read the slider value and pass it to the setter."""
-    safe(setter, st.session_state[key])
-
-
-def remove_device(device_id):
-    safe(get_hub().remove_device, device_id)
-
-
 # ----------------------------------------------------------------------
-# Sidebar: add device, save / load
+# Sidebar: add device, backup
 # ----------------------------------------------------------------------
 st.sidebar.title("🏠 " + hub.name)
 
@@ -192,6 +183,16 @@ def card_header(dev):
         unsafe_allow_html=True)
 
 
+def setting_slider(label, low, high, current, setter, key):
+    """A slider for one setting. If the person moves it, apply it to the device."""
+    # the current value is part of the key, so the slider always shows
+    # what the device really has
+    value = st.slider(label, low, high, current, key=f"{key}_{current}")
+    if value != current:
+        safe(setter, value)
+        st.rerun()
+
+
 def device_controls(dev):
     """Show the right controls for each kind of device."""
     uid = dev.device_id
@@ -200,33 +201,33 @@ def device_controls(dev):
     # turn_on()/turn_off() -> polymorphism)
     on_label, off_label = ("Lock", "Unlock") if isinstance(dev, DoorLock) else ("ON", "OFF")
     c1, c2 = st.columns(2)
-    c1.button(on_label, key=f"on_{uid}", on_click=safe, args=(dev.turn_on,))
-    c2.button(off_label, key=f"off_{uid}", on_click=safe, args=(dev.turn_off,))
+    if c1.button(on_label, key=f"on_{uid}"):
+        safe(dev.turn_on)
+        st.rerun()
+    if c2.button(off_label, key=f"off_{uid}"):
+        safe(dev.turn_off)
+        st.rerun()
 
-    # settings (sliders) are only shown while the device is ON
-    # the current value is part of the slider key, so the slider always
-    # shows what the device really has (even if someone else changed it)
+    # settings (speed, temperature...) are only shown while the device is ON
     if dev.is_on:
         if isinstance(dev, Light):
-            key = f"bright_{uid}_{dev.get_brightness()}"
-            st.slider("Brightness (%)", 0, 100, dev.get_brightness(), key=key,
-                      on_change=apply_value, args=(dev.set_brightness, key))
-
+            setting_slider("Brightness (%)", 0, 100, dev.get_brightness(),
+                           dev.set_brightness, f"bright_{uid}")
         elif isinstance(dev, Fan):
-            key = f"speed_{uid}_{dev.get_speed()}"
-            st.slider("Speed", dev.MIN_SPEED, dev.MAX_SPEED, dev.get_speed(), key=key,
-                      on_change=apply_value, args=(dev.set_speed, key))
-
+            setting_slider("Speed", dev.MIN_SPEED, dev.MAX_SPEED, dev.get_speed(),
+                           dev.set_speed, f"speed_{uid}")
         elif isinstance(dev, (AC, Heater, Geyser, Refrigerator)):
-            key = f"temp_{uid}_{dev.get_temperature()}"
-            st.slider("Temperature (°C)", dev.MIN_TEMP, dev.MAX_TEMP,
-                      dev.get_temperature(), key=key,
-                      on_change=apply_value, args=(dev.set_temperature, key))
+            setting_slider("Temperature (°C)", dev.MIN_TEMP, dev.MAX_TEMP,
+                           dev.get_temperature(), dev.set_temperature, f"temp_{uid}")
 
     if isinstance(dev, Refrigerator):
         d1, d2 = st.columns(2)
-        d1.button("Open door", key=f"open_{uid}", on_click=safe, args=(dev.open_door,))
-        d2.button("Close door", key=f"close_{uid}", on_click=safe, args=(dev.close_door,))
+        if d1.button("Open door", key=f"open_{uid}"):
+            safe(dev.open_door)
+            st.rerun()
+        if d2.button("Close door", key=f"close_{uid}"):
+            safe(dev.close_door)
+            st.rerun()
 
 
 def device_card(dev, n):
@@ -234,8 +235,9 @@ def device_card(dev, n):
         card_header(dev)
         st.caption(dev.get_status())        # polymorphism: each class has its own text
         device_controls(dev)
-        st.button("Remove", key=f"rm_{dev.device_id}",
-                  on_click=remove_device, args=(dev.device_id,))
+        if st.button("Remove", key=f"rm_{dev.device_id}"):
+            safe(hub.remove_device, dev.device_id)
+            st.rerun()
 
 
 # ----------------------------------------------------------------------
@@ -253,8 +255,12 @@ tab_dev, tab_sched, tab_notif, tab_oop = st.tabs(
 # ---- Devices tab ----
 with tab_dev:
     top1, top2, top3 = st.columns([1, 1, 2])
-    top1.button("Turn all ON", on_click=hub.turn_all_on)
-    top2.button("Turn all OFF", on_click=hub.turn_all_off)
+    if top1.button("Turn all ON"):
+        hub.turn_all_on()
+        st.rerun()
+    if top2.button("Turn all OFF"):
+        hub.turn_all_off()
+        st.rerun()
     rooms = ["All"] + sorted({d.room for d in hub.devices})
     room_filter = top3.selectbox("Room", rooms, label_visibility="collapsed")
     st.caption("Turn all OFF also unlocks the door, and the fridge refuses to switch off "
@@ -283,6 +289,7 @@ with tab_sched:
         if st.button("Add schedule"):
             safe(hub.schedule, sched_dev.device_id, sched_action,
                  sched_time.strftime("%H:%M"))
+            st.rerun()
     else:
         st.info("Add a device first.")
 
@@ -310,7 +317,9 @@ with tab_sched:
 # ---- Notifications tab ----
 with tab_notif:
     notes = hub.get_notifications()
-    st.button("Clear notifications", on_click=hub.clear_notifications)
+    if st.button("Clear notifications"):
+        hub.clear_notifications()
+        st.rerun()
     if notes:
         for stamp, text in reversed(notes):
             st.write(f"`{stamp}`  {text}")
