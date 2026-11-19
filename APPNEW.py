@@ -203,23 +203,25 @@ def device_controls(dev):
     c1.button(on_label, key=f"on_{uid}", on_click=safe, args=(dev.turn_on,))
     c2.button(off_label, key=f"off_{uid}", on_click=safe, args=(dev.turn_off,))
 
+    # settings (sliders) are only shown while the device is ON
     # the current value is part of the slider key, so the slider always
     # shows what the device really has (even if someone else changed it)
-    if isinstance(dev, Light):
-        key = f"bright_{uid}_{dev.get_brightness()}"
-        st.slider("Brightness (%)", 0, 100, dev.get_brightness(), key=key,
-                  on_change=apply_value, args=(dev.set_brightness, key))
+    if dev.is_on:
+        if isinstance(dev, Light):
+            key = f"bright_{uid}_{dev.get_brightness()}"
+            st.slider("Brightness (%)", 0, 100, dev.get_brightness(), key=key,
+                      on_change=apply_value, args=(dev.set_brightness, key))
 
-    elif isinstance(dev, Fan):
-        key = f"speed_{uid}_{dev.get_speed()}"
-        st.slider("Speed", dev.MIN_SPEED, dev.MAX_SPEED, dev.get_speed(), key=key,
-                  on_change=apply_value, args=(dev.set_speed, key))
+        elif isinstance(dev, Fan):
+            key = f"speed_{uid}_{dev.get_speed()}"
+            st.slider("Speed", dev.MIN_SPEED, dev.MAX_SPEED, dev.get_speed(), key=key,
+                      on_change=apply_value, args=(dev.set_speed, key))
 
-    elif isinstance(dev, (AC, Heater, Geyser, Refrigerator)):
-        key = f"temp_{uid}_{dev.get_temperature()}"
-        st.slider("Temperature (°C)", dev.MIN_TEMP, dev.MAX_TEMP,
-                  dev.get_temperature(), key=key,
-                  on_change=apply_value, args=(dev.set_temperature, key))
+        elif isinstance(dev, (AC, Heater, Geyser, Refrigerator)):
+            key = f"temp_{uid}_{dev.get_temperature()}"
+            st.slider("Temperature (°C)", dev.MIN_TEMP, dev.MAX_TEMP,
+                      dev.get_temperature(), key=key,
+                      on_change=apply_value, args=(dev.set_temperature, key))
 
     if isinstance(dev, Refrigerator):
         d1, d2 = st.columns(2)
